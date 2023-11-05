@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>ModeloVetorial</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Data\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="dotnet-stop-words" Version="1.1.0"/>
+    </ItemGroup>
+
+</Project>
