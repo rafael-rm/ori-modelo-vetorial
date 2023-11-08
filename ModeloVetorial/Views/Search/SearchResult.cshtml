@@ -2,7 +2,7 @@
     ViewData["Search"] = "Resultados";
 }
 
-@model List<string>
+@model Dictionary<string, double>
 
 <h2>Resultados da Pesquisa</h2>
 
@@ -10,7 +10,7 @@
     @foreach (var result in Model)
     {
         <li>
-            <a href="javascript:void(0);" class="open-html" data-filename="@result">@result</a>
+            <a href="javascript:void(0);" class="open-html" data-filename="@result.Key">@result.Key</a> - Pontuação: @result.Value
         </li>
     }
 </ul>

@@ -9,28 +9,84 @@ namespace ModeloVetorial.Util;
 
 public class InvertedIndex
 {
-    private Dictionary<string, HashSet<string>>? _index;
+    private static Dictionary<string, double>? _idf; // IDF por Termo
+    private static Dictionary<string, Dictionary<string, double>>? _tfidf; // TF-IDF do Termo x Documento
 
-    public static Task<Dictionary<string, HashSet<string>>> GenerateIndex(Dictionary<string, string> documents)
+    public static Task GenerateIndex(Dictionary<string, string> documents)
     {
-        var index = new Dictionary<string, HashSet<string>>();
+        _tfidf = new Dictionary<string, Dictionary<string, double>>();
+        _idf = new Dictionary<string, double>();
 
-        // Develop logic
+        var termFrequencyInDocument = new Dictionary<string, Dictionary<string, double>>(); // tabela TF de Termo x Documento
 
-        return Task.FromResult(index);
+        // Calculo TF - Calcula a frequência de um termo dentro de todos documento
+        foreach (var doc in documents)
+        {
+            var freqTermInDoc = new Dictionary<string, int>();
+            var terms = doc.Value.Split(' ').Select(term => term.ToLower());
+
+            // Calcula a frequencia do TERMO no DOCUMENTO
+            foreach (var term in terms)
+            {
+                freqTermInDoc[term] = freqTermInDoc.TryGetValue(term, out var freq) ? freq + 1 : 1;
+            }
+
+            // Calcula o TF para cada termo do documento
+            foreach (var term in freqTermInDoc)
+            {
+                var calc = term.Value / (double)freqTermInDoc.Values.Max(); // Max TF
+                if (termFrequencyInDocument.ContainsKey(term.Key))
+                {
+                    termFrequencyInDocument[term.Key].Add(doc.Key, calc);
+                }
+                else
+                {
+                    termFrequencyInDocument.Add(term.Key, new Dictionary<string, double> { { doc.Key, calc } } );
+                }
+            }
+        }
+
+        // Calculo IDF
+        // LOG (n documentos / freq de K na coleção)
+        foreach (var term in termFrequencyInDocument)
+        {
+            // Resultado do logaritmo aparenta estar errado
+            _idf[term.Key] = Math.Log((double) documents.Count / term.Value.Count, 10);
+        }
+
+        foreach (var termDic in termFrequencyInDocument) // Termo x Freq em cada documento
+        {
+            var idf = _idf[termDic.Key];
+            foreach (var tfDocDic in termDic.Value) // Documento x TF
+            {
+                var tfidf = tfDocDic.Value * idf;
+                if (_tfidf.ContainsKey(termDic.Key))
+                {
+                    _tfidf[termDic.Key].Add(tfDocDic.Key, tfidf);
+                }
+                else
+                {
+                    _tfidf.Add(termDic.Key, new Dictionary<string, double>{ { tfDocDic.Key, tfidf } });
+                }
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     public async Task StartIndex()
     {
-        if (_index is null)
+        if (_idf is null || _tfidf is null)
         {
             var projectDirectory = Directory.GetParent(Environment.CurrentDirectory)?.FullName;
 
-            var pathIndex = projectDirectory + "\\ModeloVetorial\\Data\\index.json";
+            var pathTfidf = projectDirectory + "\\ModeloVetorial\\Data\\tfidf.json";
+            var pathIdf = projectDirectory + "\\ModeloVetorial\\Data\\idf.json";
 
-            if (!File.Exists(pathIndex)) await SaveIndexDisk();
-
-            _index = await ReadIndexFromDisk();
+            if (!File.Exists(pathTfidf) || !File.Exists(pathIdf))
+                await SaveIndexDisk();
+            else
+                await ReadIndexFromDisk();
         }
     }
 
@@ -42,36 +98,101 @@ public class InvertedIndex
         var pathFolderIndex = projectDirectory + "\\ModeloVetorial\\Data\\";
 
         var textTreated = await GetTreatedTextFiles(pathFolderHtmls);
-        var invertedIndex = await GenerateIndex(textTreated);
+        await GenerateIndex(textTreated);
 
-        var indexPath = Path.Combine(pathFolderIndex, "index.json");
         var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
-        var json = JsonSerializer.Serialize(invertedIndex, jsonOptions);
 
-        await File.WriteAllTextAsync(indexPath, json);
+        var tfidfPath = Path.Combine(pathFolderIndex, "tfidf.json");
+        var json = JsonSerializer.Serialize(_tfidf, jsonOptions);
+        await File.WriteAllTextAsync(tfidfPath, json);
+
+        var idfPath = Path.Combine(pathFolderIndex, "idf.json");
+        json = JsonSerializer.Serialize(_idf, jsonOptions);
+        await File.WriteAllTextAsync(idfPath, json);
     }
 
-    public static async Task<Dictionary<string, HashSet<string>>> ReadIndexFromDisk()
+    public static async Task ReadIndexFromDisk()
     {
         var projectDirectory = Directory.GetParent(Environment.CurrentDirectory)?.FullName;
-        var pathFolderIndex = projectDirectory + "\\ModeloVetorial\\Data\\index.json";
+        var pathFoldertfidf = projectDirectory + "\\ModeloVetorial\\Data\\tfidf.json";
+        var pathFolderidf = projectDirectory + "\\ModeloVetorial\\Data\\idf.json";
 
-        if (!File.Exists(pathFolderIndex)) await SaveIndexDisk();
+        if (!File.Exists(pathFoldertfidf) || !File.Exists(pathFoldertfidf)) await SaveIndexDisk();
 
-        var json = await File.ReadAllTextAsync(pathFolderIndex);
+        var tfidfJson = await File.ReadAllTextAsync(pathFoldertfidf);
+        var idfJson = await File.ReadAllTextAsync(pathFolderidf);
 
-        var index = JsonSerializer.Deserialize<Dictionary<string, HashSet<string>>>(json);
-
-        return index;
+        _tfidf = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, double>>>(tfidfJson);
+        _idf = JsonSerializer.Deserialize<Dictionary<string, double>>(idfJson);
     }
 
-    public async Task<List<string>> Search(string query)
+    public async Task<Dictionary<string, double>> Search(string query)
     {
         await StartIndex();
 
-        // Develop logic
+        if (_tfidf is null || _idf is null)
+            throw new Exception("Um erro ocorreu durante a geração do index, o mesmo se encontra como NULL");
 
-        return new List<string>();
+        var queryTerms = query.Split(' ').Select(term => term.ToLower()).ToArray();
+
+        // Calcular o vetor de consulta TF-IDF
+        var queryVector = new Dictionary<string, double>();
+        var documentsNorma = new Dictionary<string, double>();
+        foreach (var term in queryTerms)
+        {
+            if (_tfidf.TryGetValue(term, out var value))
+            {
+                queryVector[term] = _idf[term];
+
+                foreach (var doc in value)
+                {
+                    var calc = doc.Value * doc.Value;
+                    if (documentsNorma.ContainsKey(doc.Key))
+                    {
+                        documentsNorma[doc.Key] += calc;
+                    }
+                    else
+                    {
+                        documentsNorma.Add(doc.Key, calc);
+                    }
+                }
+            }
+        }
+
+        foreach (var doc in documentsNorma)
+        {
+            documentsNorma[doc.Key] = Math.Sqrt(doc.Value);
+        }
+
+        var queryNorma = Math.Sqrt(queryVector.Sum(q => q.Value * q.Value));
+
+        var dic = new Dictionary<string, double>();
+        foreach (var term in queryTerms)
+        {
+            if (_tfidf.TryGetValue(term, out var documents))
+            {
+                foreach (var doc in documents)
+                {
+                    if (dic.ContainsKey(doc.Key))
+                    {
+                        dic[doc.Key] += doc.Value * queryVector[term];
+                    }
+                    else
+                    {
+                        dic[doc.Key] = doc.Value * queryVector[term];
+                    }
+                }
+            }
+        }
+
+        var ranking = new Dictionary<string, double>();
+        foreach (var d in dic)
+        {
+            ranking[d.Key] = d.Value / (queryNorma * documentsNorma[d.Key]);
+        }
+
+        return ranking.OrderByDescending(s => s.Value)
+            .ToDictionary(kvp => kvp.Key, kvp => Math.Round(kvp.Value, 2));
     }
 
     public static async Task<Dictionary<string, string>> GetPlainTextFiles(string pathFolder)

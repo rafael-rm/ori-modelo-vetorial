@@ -59,8 +59,10 @@ public class SearchController : Controller
     {
         _indexInstance = new InvertedIndex();
         var projectDirectory = Directory.GetParent(Environment.CurrentDirectory)?.FullName;
-        var pathFolderIndex = projectDirectory + "\\ModeloVetorial\\Data\\index.json";
-        System.IO.File.Delete(pathFolderIndex);
+        var pathFolderIdf = projectDirectory + "\\ModeloVetorial\\Data\\idf.json";
+        var pathFolderTfidf = projectDirectory + "\\ModeloVetorial\\Data\\tfidf.json";
+        System.IO.File.Delete(pathFolderIdf);
+        System.IO.File.Delete(pathFolderTfidf);
         await _indexInstance.StartIndex();
         return Ok();
     }
