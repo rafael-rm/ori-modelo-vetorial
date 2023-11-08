@@ -17,7 +17,7 @@ public class InvertedIndex
         _tfidf = new Dictionary<string, Dictionary<string, double>>();
         _idf = new Dictionary<string, double>();
 
-        var termFrequencyInDocument = new Dictionary<string, Dictionary<string, double>>(); // tabela TF de Termo x Documento
+        var termFrequencyInDocument = new Dictionary<string, Dictionary<string, double>>(); // tabela TF de Termo x (Documento x TF)
 
         // Calculo TF - Calcula a frequência de um termo dentro de todos documento
         foreach (var doc in documents)
@@ -50,23 +50,19 @@ public class InvertedIndex
         // LOG (n documentos / freq de K na coleção)
         foreach (var term in termFrequencyInDocument)
         {
-            // Resultado do logaritmo aparenta estar errado
-            _idf[term.Key] = Math.Log((double) documents.Count / term.Value.Count, 10);
-        }
-
-        foreach (var termDic in termFrequencyInDocument) // Termo x Freq em cada documento
-        {
-            var idf = _idf[termDic.Key];
-            foreach (var tfDocDic in termDic.Value) // Documento x TF
+            var idf = Math.Log((double) documents.Count / term.Value.Count, 10);
+            _idf[term.Key] = idf;
+            
+            foreach (var tfDocDic in term.Value) // Documento x TF
             {
                 var tfidf = tfDocDic.Value * idf;
-                if (_tfidf.ContainsKey(termDic.Key))
+                if (_tfidf.ContainsKey(term.Key))
                 {
-                    _tfidf[termDic.Key].Add(tfDocDic.Key, tfidf);
+                    _tfidf[term.Key].Add(tfDocDic.Key, tfidf);
                 }
                 else
                 {
-                    _tfidf.Add(termDic.Key, new Dictionary<string, double>{ { tfDocDic.Key, tfidf } });
+                    _tfidf.Add(term.Key, new Dictionary<string, double>{ { tfDocDic.Key, tfidf } });
                 }
             }
         }
@@ -166,7 +162,7 @@ public class InvertedIndex
 
         var queryNorma = Math.Sqrt(queryVector.Sum(q => q.Value * q.Value));
 
-        var dic = new Dictionary<string, double>();
+        var dic = new Dictionary<string, double>(); // q * d
         foreach (var term in queryTerms)
         {
             if (_tfidf.TryGetValue(term, out var documents))
@@ -186,7 +182,7 @@ public class InvertedIndex
         }
 
         var ranking = new Dictionary<string, double>();
-        foreach (var d in dic)
+        foreach (var d in dic) // Calculo do Cosseno
         {
             ranking[d.Key] = d.Value / (queryNorma * documentsNorma[d.Key]);
         }
